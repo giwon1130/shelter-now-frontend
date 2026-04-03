@@ -57,6 +57,8 @@ function App() {
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [districtFilter, setDistrictFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sortBy, setSortBy] = useState<'distance' | 'capacity' | 'name'>('distance')
   const [position, setPosition] = useState(DEFAULT_POSITION)
   const [shelters, setShelters] = useState<ShelterSummary[]>([])
   const [mapGroups, setMapGroups] = useState<ShelterMapGroup[]>([])
@@ -67,6 +69,10 @@ function App() {
   const [locationMessage, setLocationMessage] = useState('서울시청 기준으로 불러오는 중')
 
   const types = useMemo(() => mapGroups.map((group) => group.shelterType), [mapGroups])
+  const statuses = useMemo(
+    () => ['운영중', '상시개방', '운영준비'],
+    [],
+  )
   const districts = useMemo(
     () => [...new Set(shelters.map((item) => item.district))].sort(),
     [shelters],
@@ -89,6 +95,8 @@ function App() {
       if (query.trim()) params.set('query', query.trim())
       if (typeFilter) params.set('shelterType', typeFilter)
       if (districtFilter) params.set('district', districtFilter)
+      if (statusFilter) params.set('openStatus', statusFilter)
+      params.set('sortBy', sortBy)
       params.set('latitude', String(nextPosition.latitude))
       params.set('longitude', String(nextPosition.longitude))
 
@@ -246,6 +254,19 @@ function App() {
                 {district}
               </option>
             ))}
+          </select>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="">전체 운영 상태</option>
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as 'distance' | 'capacity' | 'name')}>
+            <option value="distance">거리순</option>
+            <option value="capacity">수용인원순</option>
+            <option value="name">이름순</option>
           </select>
           <button type="button" onClick={() => void loadShelters()}>
             Search
