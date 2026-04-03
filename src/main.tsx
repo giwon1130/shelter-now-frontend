@@ -33,6 +33,8 @@ type ShelterMapGroup = {
 }
 
 const API_BASE_URL = '/api/v1'
+const DEFAULT_POSITION = { latitude: 37.5665, longitude: 126.9780 }
+const FAVORITES_STORAGE_KEY = 'shelter-now:favorites'
 
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`)
@@ -47,20 +49,31 @@ function formatDistance(distanceMeters?: number | null) {
   return `${(distanceMeters / 1000).toFixed(1)}km`
 }
 
+function formatPosition(latitude: number, longitude: number) {
+  return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+}
+
 function App() {
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [districtFilter, setDistrictFilter] = useState('')
+  const [position, setPosition] = useState(DEFAULT_POSITION)
   const [shelters, setShelters] = useState<ShelterSummary[]>([])
   const [mapGroups, setMapGroups] = useState<ShelterMapGroup[]>([])
   const [selectedShelter, setSelectedShelter] = useState<ShelterDetail | null>(null)
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [locationMessage, setLocationMessage] = useState('서울시청 기준으로 불러오는 중')
 
   const types = useMemo(() => mapGroups.map((group) => group.shelterType), [mapGroups])
   const districts = useMemo(
     () => [...new Set(shelters.map((item) => item.district))].sort(),
     [shelters],
+  )
+  const favoriteShelters = useMemo(
+    () => shelters.filter((item) => favoriteIds.includes(item.shelterId)),
+    [favoriteIds, shelters],
   )
 
   async function loadMap() {
@@ -68,7 +81,7 @@ function App() {
     setMapGroups(data)
   }
 
-  async function loadShelters() {
+  async function loadShelters(nextPosition = position) {
     setLoading(true)
     setErrorMessage('')
     try {
@@ -76,8 +89,8 @@ function App() {
       if (query.trim()) params.set('query', query.trim())
       if (typeFilter) params.set('shelterType', typeFilter)
       if (districtFilter) params.set('district', districtFilter)
-      params.set('latitude', '37.5665')
-      params.set('longitude', '126.9780')
+      params.set('latitude', String(nextPosition.latitude))
+      params.set('longitude', String(nextPosition.longitude))
 
       const data = await fetchJson<ShelterSummary[]>(`/shelters?${params.toString()}`)
       setShelters(data)
@@ -98,9 +111,56 @@ function App() {
     setSelectedShelter(data)
   }
 
+  function requestCurrentPosition() {
+    if (!navigator.geolocation) {
+      setLocationMessage('브라우저 위치 기능을 지원하지 않아 서울시청 기준으로 제공 중')
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (geo) => {
+        const nextPosition = {
+          latitude: geo.coords.latitude,
+          longitude: geo.coords.longitude,
+        }
+        setPosition(nextPosition)
+        setLocationMessage(`현재 위치 기준 ${formatPosition(nextPosition.latitude, nextPosition.longitude)}`)
+        void loadShelters(nextPosition)
+      },
+      () => {
+        setLocationMessage('위치 권한이 없어 서울시청 기준으로 제공 중')
+      },
+      { enableHighAccuracy: true, timeout: 8000 },
+    )
+  }
+
+  function toggleFavorite(shelterId: string) {
+    setFavoriteIds((prev) => {
+      const next = prev.includes(shelterId)
+        ? prev.filter((id) => id !== shelterId)
+        : [...prev, shelterId]
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+
+  function openExternalMap(shelter: ShelterDetail) {
+    const url = `https://map.naver.com/v5/search/${encodeURIComponent(shelter.shelterName)}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   useEffect(() => {
+    const storedFavorites = localStorage.getItem(FAVORITES_STORAGE_KEY)
+    if (storedFavorites) {
+      try {
+        setFavoriteIds(JSON.parse(storedFavorites))
+      } catch {
+        localStorage.removeItem(FAVORITES_STORAGE_KEY)
+      }
+    }
     void loadMap()
     void loadShelters()
+    requestCurrentPosition()
   }, [])
 
   return (
@@ -118,6 +178,7 @@ function App() {
           <span className="label">Current Focus</span>
           <strong>{selectedShelter?.shelterName ?? '대표 쉼터를 선택해봐'}</strong>
           <p>{selectedShelter?.note ?? '쉼터를 선택하면 운영 상태와 상세 정보를 보여준다.'}</p>
+          <small className="location-copy">{locationMessage}</small>
         </div>
       </section>
 
@@ -162,6 +223,12 @@ function App() {
             <h2>가까운 쉼터 탐색</h2>
           </div>
         </div>
+        <div className="action-row">
+          <button type="button" className="secondary-button" onClick={() => requestCurrentPosition()}>
+            현재 위치로 재조회
+          </button>
+          <small className="location-copy">{locationMessage}</small>
+        </div>
         <div className="search-box">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="쉼터 이름 또는 주소" />
           <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
@@ -186,20 +253,44 @@ function App() {
         </div>
         {loading ? <p className="feedback">쉼터를 불러오는 중...</p> : null}
         {errorMessage ? <p className="feedback error">{errorMessage}</p> : null}
+        {favoriteShelters.length ? (
+          <div className="favorite-strip">
+            <span className="label">Favorites</span>
+            <div className="favorite-chip-row">
+              {favoriteShelters.map((shelter) => (
+                <button
+                  key={shelter.shelterId}
+                  type="button"
+                  className="favorite-chip"
+                  onClick={() => void focusShelter(shelter.shelterId)}
+                >
+                  {shelter.shelterName}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="shelter-grid">
           {shelters.map((shelter) => (
-            <button
+            <div
               key={shelter.shelterId}
-              type="button"
               className={`shelter-card${selectedShelter?.shelterId === shelter.shelterId ? ' selected' : ''}`}
-              onClick={() => void focusShelter(shelter.shelterId)}
             >
-              <strong>{shelter.shelterName}</strong>
-              <span>{shelter.shelterType}</span>
-              <small>
-                {shelter.district} · {formatDistance(shelter.distanceMeters)}
-              </small>
-            </button>
+              <button type="button" className="shelter-card-main" onClick={() => void focusShelter(shelter.shelterId)}>
+                <strong>{shelter.shelterName}</strong>
+                <span>{shelter.shelterType}</span>
+                <small>
+                  {shelter.district} · {formatDistance(shelter.distanceMeters)}
+                </small>
+              </button>
+              <button
+                type="button"
+                className={`favorite-button${favoriteIds.includes(shelter.shelterId) ? ' active' : ''}`}
+                onClick={() => toggleFavorite(shelter.shelterId)}
+              >
+                {favoriteIds.includes(shelter.shelterId) ? '저장됨' : '즐겨찾기'}
+              </button>
+            </div>
           ))}
         </div>
       </section>
@@ -225,6 +316,20 @@ function App() {
               <span className="label">Address</span>
               <strong>{selectedShelter.address}</strong>
               <p>{selectedShelter.note}</p>
+              <p className="detail-meta">
+                {selectedShelter.phone ? `연락처 ${selectedShelter.phone}` : '연락처 미등록'} · 현재 위치 기준{' '}
+                {formatDistance(shelters.find((item) => item.shelterId === selectedShelter.shelterId)?.distanceMeters)}
+              </p>
+              <div className="detail-actions">
+                <button type="button" className="secondary-button" onClick={() => openExternalMap(selectedShelter)}>
+                  외부 지도 열기
+                </button>
+                {selectedShelter.phone ? (
+                  <a className="link-button" href={`tel:${selectedShelter.phone}`}>
+                    전화하기
+                  </a>
+                ) : null}
+              </div>
             </article>
           </div>
         ) : null}
