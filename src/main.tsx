@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import './styles.css'
 
 type ApiResponse<T> = {
@@ -36,6 +39,15 @@ const API_BASE_URL = '/api/v1'
 const DEFAULT_POSITION = { latitude: 37.5665, longitude: 126.9780 }
 const FAVORITES_STORAGE_KEY = 'shelter-now:favorites'
 
+const markerIcon = new L.Icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+})
+
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`)
   if (!response.ok) throw new Error(`request failed: ${response.status}`)
@@ -51,6 +63,14 @@ function formatDistance(distanceMeters?: number | null) {
 
 function formatPosition(latitude: number, longitude: number) {
   return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+}
+
+function RecenterMap({ latitude, longitude }: { latitude: number; longitude: number }) {
+  const map = useMap()
+  useEffect(() => {
+    map.setView([latitude, longitude], map.getZoom(), { animate: true })
+  }, [latitude, longitude, map])
+  return null
 }
 
 function App() {
@@ -221,6 +241,38 @@ function App() {
               </div>
             </article>
           ))}
+        </div>
+        <div className="leaflet-wrap">
+          <MapContainer center={[position.latitude, position.longitude]} zoom={7} className="leaflet-map">
+            <RecenterMap
+              latitude={selectedShelter?.latitude ?? position.latitude}
+              longitude={selectedShelter?.longitude ?? position.longitude}
+            />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {shelters.map((shelter) => (
+              <Marker
+                key={shelter.shelterId}
+                icon={markerIcon}
+                position={[shelter.latitude, shelter.longitude]}
+                eventHandlers={{
+                  click: () => {
+                    void focusShelter(shelter.shelterId)
+                  },
+                }}
+              >
+                <Popup>
+                  <strong>{shelter.shelterName}</strong>
+                  <br />
+                  {shelter.shelterType} · {shelter.district}
+                  <br />
+                  {formatDistance(shelter.distanceMeters)}
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
         </div>
       </section>
 

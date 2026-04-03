@@ -97,6 +97,18 @@ h1 {
   gap: 14px;
 }
 
+.leaflet-wrap {
+  margin-top: 16px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.leaflet-map {
+  height: 380px;
+  width: 100%;
+}
+
 .map-group-card {
   padding: 18px;
   border-radius: 20px;
