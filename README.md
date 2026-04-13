@@ -21,6 +21,18 @@ npm install
 npm run dev
 ```
 
+- 기본 개발 포트: `http://127.0.0.1:4177`
+- `/api` 요청은 `http://127.0.0.1:8086` 백엔드로 프록시된다.
+
+## Docker
+```bash
+docker build -t shelter-now-frontend .
+docker run -p 4177:80 shelter-now-frontend
+```
+
+- 정적 웹 포트: `http://127.0.0.1:4177`
+- 프론트만 따로 띄울 때는 리버스 프록시나 별도 API 경로 연결이 필요하다.
+
 ## 다음 단계
 - 전국 단위 원본 대피소/쉼터 데이터 적재 파이프라인 반영 후 검색 범위 확대
 - 실제 공공데이터 연동
